@@ -2,9 +2,12 @@
 
 ## Current scope
 
-This repository contains publishing infrastructure only. Application code,
-scientific data, uploads, server settings and credentials have not been copied
-into this repository. No release or PyPI upload is performed during setup.
+This repository contains publishing infrastructure and a minimal installable
+placeholder package, version `0.0.1.dev0`. It provides version information and a
+command-line entry point. Reconstruction, analysis and web application code are
+not included. Scientific data, uploads, server settings and credentials have not
+been copied into this repository. Adding the scaffold does not create a release
+or upload a package to PyPI.
 
 The workflow lives at `.github/workflows/workflow.yml`. Its filename and the
 `pypi` environment match the intended PyPI pending trusted publisher.
@@ -33,29 +36,30 @@ Administrators can manage protection rules under **Settings → Environments →
 
 | Event | Result |
 | --- | --- |
-| Push to `main` | Check readiness; build and validate once source exists |
-| Pull request targeting `main` | Check readiness; build and validate once source exists |
+| Push to `main` | Build distributions, validate metadata and verify installation |
+| Pull request targeting `main` | Build distributions, validate metadata and verify installation |
 | Actions → Run workflow | Validation only; never uploads to PyPI |
 | Publish a GitHub Release | Build, validate, and upload the verified artifacts |
 
-Without `pyproject.toml`, ordinary validation reports that source is missing and
-skips building. A release without source fails explicitly instead of publishing
-a placeholder package. Source readiness is not a successful package build.
+The scaffold includes `pyproject.toml`, so the build job now runs. If that file
+is removed, ordinary validation reports missing source and skips building; a
+release without it fails explicitly. Packaging checks verify installation, not
+scientific functionality.
 
 ## Before the first release
 
-1. Add the actual application source and a working `pyproject.toml`. Declare
-   `[project] name = "Omics3D"`, a version (static or dynamic), the supported
-   Python versions, dependencies, and an appropriate build backend. The build
-   workflow currently uses Python 3.11; adjust it if the application requires a
-   different build interpreter.
+1. Replace the development scaffold with the intended public functionality and
+   update the README. The package name is already `Omics3D`; the version is read
+   from `src/omics3d/__init__.py`. Update dependencies and supported Python versions
+   as needed. The build workflow currently uses Python 3.11.
 2. Add the package's README and license information, the intended public assets,
    and application tests. Explicitly exclude credentials, runtime state, user
    uploads and scientific data from distributions.
 3. Push the source and confirm **Build and verify distributions** passes. It
    builds the wheel from the source distribution using `python -m build`, runs
-   `twine check --strict`, verifies the package name and matching versions, and
-   stores both distributions in the `python-package-distributions` artifact.
+   `twine check --strict`, verifies the package name and matching versions,
+   checks the installed wheel and command-line entry points, and stores both
+   distributions in the `python-package-distributions` artifact.
    These packaging checks do not replace application tests.
 4. Create and publish a GitHub Release with a tag matching the package version:
    version `0.1.0` uses tag `v0.1.0`; version `0.1.0rc1` uses tag `v0.1.0rc1`.
@@ -71,8 +75,8 @@ PyPI publication: the upload job must succeed.
 
 ## Troubleshooting
 
-- **No source yet / build skipped:** expected for the initial configuration-only
-  repository. Add application source and `pyproject.toml` before releasing.
+- **No source yet / build skipped:** check that the selected commit includes
+  `pyproject.toml` and the package source.
 - **Publisher mismatch / invalid publisher:** check owner `ultraypy`, repository
   `Omics3D`, filename `workflow.yml`, environment `pypi`, and whether the pending
   publisher is configured on PyPI rather than TestPyPI.

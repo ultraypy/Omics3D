@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "Omics3D"
+dynamic = ["version"]
+description = "Development scaffold for Omics3D spatial multi-omics tools."
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Science/Research",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+]
+
+[project.scripts]
+omics3d = "omics3d.cli:main"
+
+[project.urls]
+Repository = "https://github.com/ultraypy/Omics3D"
+Issues = "https://github.com/ultraypy/Omics3D/issues"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+namespaces = false
+
+[tool.setuptools.dynamic]
+version = {attr = "omics3d.__version__"}
