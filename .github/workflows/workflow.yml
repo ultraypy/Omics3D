@@ -1,13 +1,8 @@
-name: Validate and publish Omics3D
+name: Publish Omics3D 0.0.1.dev0
 
 on:
   push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-  workflow_dispatch:
-  release:
-    types: [published]
+    branches: [release/pypi-0.0.1.dev0]
 
 permissions:
   contents: read
@@ -27,31 +22,15 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: e8b2b7d685b9b09563be2573b7c3dac515a095cd
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
       - name: Inspect source package
         id: package
         env:
-          RELEASE_EVENT: ${{ github.event_name == 'release' && '1' || '0' }}
+          RELEASE_EVENT: '1'
         run: python scripts/check_release.py source
-
-  environment:
-    name: Initialize PyPI environment (no upload)
-    if: >-
-      github.repository == 'ultraypy/Omics3D' &&
-      github.ref == 'refs/heads/main' &&
-      (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions: {}
-    environment:
-      name: pypi
-    steps:
-      - name: Confirm environment
-        run: >-
-          echo 'The pypi environment is configured. This job does not build or upload a package.'
-          >> "$GITHUB_STEP_SUMMARY"
 
   build:
     name: Build and verify distributions
@@ -63,6 +42,7 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: e8b2b7d685b9b09563be2573b7c3dac515a095cd
       - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
         with:
           python-version: '3.11'
@@ -74,7 +54,7 @@ jobs:
         run: python -m twine check --strict dist/*
       - name: Check package identity and release version
         env:
-          RELEASE_TAG: ${{ github.event.release.tag_name || '' }}
+          RELEASE_TAG: v0.0.1.dev0
         run: python scripts/check_release.py distributions dist
       - name: Verify installed package
         run: |
@@ -90,13 +70,76 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  publish:
-    name: Publish to PyPI
+  release:
+    name: Create development release
     needs: build
     if: >-
       github.repository == 'ultraypy/Omics3D' &&
-      github.event_name == 'release' &&
-      github.event.action == 'published'
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/release/pypi-0.0.1.dev0'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create release for the verified source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import urllib.error
+          import urllib.request
+          
+          base = 'https://api.github.com/repos/ultraypy/Omics3D/'
+          source = 'e8b2b7d685b9b09563be2573b7c3dac515a095cd'
+          tag = 'v0.0.1.dev0'
+          
+          def api(method, path, data=None, allow_missing=False):
+              payload = None if data is None else json.dumps(data).encode()
+              request = urllib.request.Request(base + path, data=payload, method=method, headers={
+                  'Authorization': 'Bearer ' + os.environ['GH_TOKEN'],
+                  'Accept': 'application/vnd.github+json',
+                  'Content-Type': 'application/json',
+                  'X-GitHub-Api-Version': '2022-11-28',
+              })
+              try:
+                  with urllib.request.urlopen(request, timeout=30) as response:
+                      return json.load(response)
+              except urllib.error.HTTPError as error:
+                  if allow_missing and error.code == 404:
+                      return None
+                  raise
+          
+          head = api('GET', 'git/ref/heads/main')
+          assert head['object']['sha'] == source, 'Main changed; review the release source before retrying.'
+          ref = api('GET', 'git/ref/tags/' + tag, allow_missing=True)
+          if ref is not None:
+              assert ref['object']['type'] == 'commit' and ref['object']['sha'] == source, 'Release tag points to different source.'
+          release = api('GET', 'releases/tags/' + tag, allow_missing=True)
+          if release is None:
+              release = api('POST', 'releases', {
+                  'tag_name': tag, 'target_commitish': source,
+                  'name': 'Omics3D 0.0.1.dev0', 'draft': False, 'prerelease': True,
+                  'make_latest': 'false',
+                  'body': 'Initial development scaffold for Omics3D.\n\nProvides an installable Python package, version information, and command-line entry points. Reconstruction, analysis, and the web application are not included yet.\n\nValidated by building a wheel from the source distribution, checking metadata, and testing installation and command-line entry points.\n\nInstall this development version with `python -m pip install Omics3D==0.0.1.dev0` after the PyPI publishing job completes.',
+              })
+          assert not release['draft'] and release['prerelease'], 'Expected a published prerelease.'
+          ref = api('GET', 'git/ref/tags/' + tag)
+          assert ref['object']['type'] == 'commit' and ref['object']['sha'] == source, 'Published tag source differs.'
+          print(release['html_url'])
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a') as summary:
+              summary.write('Release: ' + release['html_url'] + '\n')
+          PY
+
+  publish:
+    name: Publish to PyPI
+    needs: [build, release]
+    if: >-
+      github.repository == 'ultraypy/Omics3D' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/release/pypi-0.0.1.dev0'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
